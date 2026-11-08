@@ -1,6 +1,11 @@
 // Fetch client for the FastAPI backend.
 // CORS on the backend already allows the Vite dev origin, so we call it directly.
 import type {
+  AppConfig,
+  ReviewRecord,
+  RunMode,
+  SampleInfo,
+  Workflow,
   DocumentDetail,
   DocumentSummary,
   DecisionResult,
@@ -43,11 +48,12 @@ interface RequestOpts {
   method?: string;
   query?: Record<string, string | number | boolean | undefined>;
   body?: BodyInit;
+  headers?: Record<string, string>;
   signal?: AbortSignal;
 }
 
 async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
-  const { method = "GET", query, body, signal } = opts;
+  const { method = "GET", query, body, signal, headers } = opts;
   const qs = query
     ? "?" +
       Object.entries(query)
@@ -57,7 +63,7 @@ async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
     : "";
   let res: Response;
   try {
-    res = await fetch(`${API_BASE_URL}${path}${qs}`, { method, body, signal });
+    res = await fetch(`${API_BASE_URL}${path}${qs}`, { method, body, signal, headers });
   } catch {
     throw new ApiError(0, "Cannot reach the backend — is it running on :8000?");
   }
@@ -172,5 +178,55 @@ export async function runStructure(
 export async function runDecide(id: string): Promise<DecisionResult> {
   return request<DecisionResult>(`/documents/${id}/decide`, { method: "POST" });
 }
+
+// --- purchasing workflow (adapter addition) ----------------------------------
+
+function sessionId(): string {
+  try {
+    let id = localStorage.getItem("session-id");
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem("session-id", id);
+    }
+    return id;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
+export const getConfig = () => request<AppConfig>("/config");
+export const listSamples = () => request<SampleInfo[]>("/samples");
+export const getWorkflow = (id: string) =>
+  request<Workflow>(`/documents/${id}/workflow`);
+
+export async function runSample(
+  sampleId: string,
+  mode: RunMode,
+): Promise<{ document_id: string }> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}/samples/${sampleId}/run?mode=${mode}`, {
+      method: "POST",
+      headers: { "X-Session-Id": sessionId() },
+    });
+  } catch {
+    throw new ApiError(0, "Cannot reach the backend.");
+  }
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new ApiError(res.status, data.detail ?? `${res.status} ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export const submitReview = (
+  id: string,
+  body: { reviewer: string; outcome: "approve" | "reject"; reason: string },
+) =>
+  request<ReviewRecord>(`/documents/${id}/review`, {
+    method: "POST",
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json", "X-Session-Id": sessionId() },
+  });
 
 export { API_BASE_URL };

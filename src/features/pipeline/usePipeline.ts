@@ -357,13 +357,14 @@ export function usePipeline(): UsePipeline {
       }
 
       // 404s (a stage that never ran) settle as rejections we intentionally drop.
-      const [prescanR, doclingR, qwenR, structureR, decisionR] =
+      const [prescanR, doclingR, qwenR, structureR, decisionR, pdfTextR] =
         await Promise.allSettled([
           getPrescan(id),
           getOcr(id, "docling"),
           getOcr(id, "qwen-vl"),
           getStructure(id),
           getDecision(id),
+          getOcr(id, "pdf-text"),
         ]);
 
       // A newer openDocument started while we were fetching — drop these results.
@@ -372,6 +373,7 @@ export function usePipeline(): UsePipeline {
       const ocrByEngine: Record<string, OCRResult> = {};
       if (doclingR.status === "fulfilled") ocrByEngine.docling = doclingR.value;
       if (qwenR.status === "fulfilled") ocrByEngine["qwen-vl"] = qwenR.value;
+      if (pdfTextR.status === "fulfilled") ocrByEngine["pdf-text"] = pdfTextR.value;
 
       // Keep the user's selected engine if it has a result; otherwise fall back
       // to whichever engine does (docling is inserted first, so it's preferred).

@@ -8,7 +8,7 @@ relevant stage entry, so re-running live on camera doesn't pile up rows.
 import asyncio
 from typing import Callable, TypeVar
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlmodel import Session, select
 
 from app.config import settings
@@ -25,6 +25,21 @@ from app.schemas import DecisionResult, OCRResult, QualityReport, StructuredResu
 router = APIRouter(prefix="/documents/{doc_id}", tags=["pipeline"])
 
 _T = TypeVar("_T")
+
+# Modified: in PUBLIC_MODE only free, deterministic engines/providers may be invoked on the
+# per-document stage routes. Anything that costs money or heavy CPU (qwen-vl, docling,
+# langextract, llm) needs the sandbox token; public visitors reach live inference only via
+# POST /samples/{id}/run?mode=live, which is quota-capped.
+_PUBLIC_OCR = {"pdf-text", "mock"}
+_PUBLIC_STRUCTURING = {"recorded", "mock"}
+_PUBLIC_DECISION = {"rules", "mock"}
+
+
+def _gate_public(value: str, allowed: set[str], token: str | None) -> None:
+    if settings.public_mode and value not in allowed:
+        from app.routes.documents import require_sandbox
+
+        require_sandbox(token)
 
 
 async def _run_stage(stage: str, timeout: float, fn: Callable[..., _T], *args, **kwargs) -> _T:
@@ -142,6 +157,7 @@ def get_prescan(doc_id: str, session: Session = Depends(get_session)) -> Quality
 async def ocr_document(
     doc_id: str,
     engine: str = Query(default=""),
+    x_sandbox_token: str | None = Header(default=None),
     session: Session = Depends(get_session),
 ) -> OCRResult:
     """Run a swappable OCR engine over the document's pages and persist the result.
@@ -151,6 +167,7 @@ async def ocr_document(
     overwrites just that engine's entry.
     """
     engine = engine or settings.ocr_default_engine
+    _gate_public(engine, _PUBLIC_OCR, x_sandbox_token)
 
     doc = session.get(Document, doc_id)
     if doc is None:
@@ -196,6 +213,7 @@ async def structure_document(
     doc_type: DocType | None = Query(default=None),
     provider: str = Query(default=""),
     ocr_engine: str = Query(default=""),
+    x_sandbox_token: str | None = Header(default=None),
     session: Session = Depends(get_session),
 ) -> StructuredResult:
     """Structure a document's OCR text into validated, grounded JSON and persist it.
@@ -204,6 +222,7 @@ async def structure_document(
     first. The result is stored under ``stage_results["structure"]`` (one object).
     """
     ocr_engine = ocr_engine or settings.ocr_default_engine
+    _gate_public(provider or settings.structuring_provider, _PUBLIC_STRUCTURING, x_sandbox_token)
 
     doc = session.get(Document, doc_id)
     if doc is None:
@@ -281,6 +300,7 @@ def _prior_invoice_numbers(session: Session, exclude_doc_id: str, scope: str | N
 async def decide_document(
     doc_id: str,
     provider: str = Query(default=""),
+    x_sandbox_token: str | None = Header(default=None),
     session: Session = Depends(get_session),
 ) -> DecisionResult:
     """Decide a structured document (approve | flag | needs_review) and persist it.
@@ -289,6 +309,7 @@ async def decide_document(
     ``stage_results["prescan"]`` verdict. Deterministic rules run in code; the LLM
     only adds judgment it can't use to override a hard-failed rule.
     """
+    _gate_public(provider or settings.decision_provider, _PUBLIC_DECISION, x_sandbox_token)
     doc = session.get(Document, doc_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found.")

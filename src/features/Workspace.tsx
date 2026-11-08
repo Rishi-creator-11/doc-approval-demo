@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, FileText, Plus, ReceiptText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,10 +7,19 @@ import { usePipelineContext } from "@/features/pipeline/PipelineContext";
 import { Stepper } from "@/features/pipeline/Stepper";
 import { QualityReportPanel } from "@/features/pipeline/QualityReportPanel";
 import { SplitInspector } from "@/features/inspector/SplitInspector";
+import { ModeBadge } from "@/features/purchasing/ModeBadge";
+import { getWorkflow } from "@/lib/api";
+import type { RunMode } from "@/lib/types";
 
 export function Workspace() {
   const { document, prescan, reset } = usePipelineContext();
   const [showPrescan, setShowPrescan] = useState(false);
+  const [mode, setMode] = useState<RunMode | null>(null);
+  const docId = document?.id;
+  useEffect(() => {
+    if (!docId) return;
+    getWorkflow(docId).then((w) => setMode(w.mode)).catch(() => setMode(null));
+  }, [docId]);
 
   if (!document) return null;
   const DocIcon = document.doc_type === "contract" ? FileText : ReceiptText;
@@ -31,6 +40,7 @@ export function Workspace() {
                   {document.doc_type}
                 </Badge>
               )}
+              {mode && <ModeBadge mode={mode} />}
               <span className="font-mono">
                 {document.page_count} page{document.page_count > 1 ? "s" : ""}
               </span>

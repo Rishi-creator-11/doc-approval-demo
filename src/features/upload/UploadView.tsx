@@ -5,6 +5,7 @@ import { Dropzone } from "@/features/upload/Dropzone";
 import { DocTypeToggle } from "@/features/upload/DocTypeToggle";
 import { EngineSelect } from "@/features/upload/EngineSelect";
 import { DocumentLibrary } from "@/features/upload/DocumentLibrary";
+import { SamplePicker } from "@/features/purchasing/SamplePicker";
 
 const STAGES = [
   { label: "Pre-scan", hint: "quality & deskew" },
@@ -39,6 +40,10 @@ export function UploadView() {
             structured into fields, and approved or flagged — every field
             traceable to its source.
           </p>
+        </div>
+
+        <div className="w-full">
+          <SamplePicker />
         </div>
 
         <Card className="w-full">

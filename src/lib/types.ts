@@ -2,7 +2,7 @@
 // Kept hand-maintained and minimal to match the JSON the API returns.
 
 export type DocType = "invoice" | "contract";
-export type OcrEngine = "qwen-vl" | "docling";
+export type OcrEngine = "qwen-vl" | "docling" | "pdf-text";
 export type DocumentStatus =
   | "uploaded"
   | "prescanned"
@@ -179,4 +179,53 @@ export interface DecisionResult {
   llm_decision: Decision | null;
   warnings: string[];
   latency_ms: number;
+}
+
+// --- Purchasing workflow (adapter addition) ---------------------------------
+export type RunMode = "recorded" | "live" | "manual";
+
+export interface PoComparison {
+  key: string;
+  label: string;
+  expected: string | null;
+  observed: string | null;
+  status: "match" | "mismatch" | "missing";
+  evidence: { page: number | null; snippet: string | null } | null;
+}
+
+export interface PoReconciliation {
+  po_number: string | null;
+  supplier_on_po: string | null;
+  status: "matched" | "mismatch" | "po_not_found" | "no_po_number";
+  comparisons: PoComparison[];
+  reasons: string[];
+}
+
+export interface ReviewRecord {
+  reviewer: string;
+  outcome: "approve" | "reject";
+  reason: string;
+  decided_at: string;
+  system_decision: Decision;
+}
+
+export interface Workflow {
+  mode: RunMode;
+  po_reconciliation: PoReconciliation | null;
+  review: ReviewRecord | null;
+}
+
+export interface AppConfig {
+  public_mode: boolean;
+  live_available: boolean;
+  upload_enabled: boolean;
+  sandbox_max_upload_mb: number;
+  ttl_minutes: number;
+  live_models: { ocr: string; structuring: string; decision: string };
+}
+
+export interface SampleInfo {
+  id: string;
+  title: string;
+  expect: string;
 }

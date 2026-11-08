@@ -8,6 +8,7 @@ configured OpenRouter key, behind a per-IP and global hourly cap.
 
 from __future__ import annotations
 
+import secrets
 import time
 from collections import deque
 from threading import Lock
@@ -29,7 +30,7 @@ from app.po import PURCHASE_ORDERS, reconcile_invoice
 from app.rules import DecisionContext
 from app.schemas import OCRResult, StructuredResult
 
-from .documents import ingest_document
+from .documents import ingest_document, require_sandbox
 from .pipeline import (
     _latest_run, _prior_invoice_numbers, _run_stage, _save_stage, get_or_create_run,
 )
@@ -183,9 +184,26 @@ def get_workflow(doc_id: str, session: Session = Depends(get_session)) -> dict:
 
 
 @router.post("/documents/{doc_id}/review", status_code=201)
-def submit_review(doc_id: str, body: ReviewIn, session: Session = Depends(get_session)) -> dict:
-    """Record one reviewer decision (with timestamp and reason). Write-once."""
+def submit_review(
+    doc_id: str,
+    body: ReviewIn,
+    x_session_id: str | None = Header(default=None),
+    x_sandbox_token: str | None = Header(default=None),
+    session: Session = Depends(get_session),
+) -> dict:
+    """Record one reviewer decision (with timestamp and reason). Write-once.
+
+    Authorization: a sample run can only be reviewed by the browser session that created
+    it (X-Session-Id must match). Documents without a session (sandbox uploads) need the
+    sandbox token in public mode. The reviewer name is a free-text label, not an identity.
+    """
     run = _doc_run(session, doc_id)
+    owner = (run.stage_results.get("meta") or {}).get("session")
+    if owner:
+        if not x_session_id or not secrets.compare_digest(x_session_id[:64], owner):
+            raise HTTPException(status_code=403, detail="Only the session that ran this sample can record its review.")
+    else:
+        require_sandbox(x_sandbox_token)
     doc = session.get(Document, doc_id)
     decide = run.stage_results.get("decide")
     if not decide:

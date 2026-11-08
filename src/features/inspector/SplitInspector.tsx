@@ -8,6 +8,7 @@ import { OcrTextPanel } from "@/features/inspector/OcrTextPanel";
 import { StructuredPanel } from "@/features/inspector/StructuredPanel";
 import { EngineComparison } from "@/features/inspector/EngineComparison";
 import { DecisionCard } from "@/features/decision/DecisionCard";
+import { PoMatchPanel } from "@/features/purchasing/PoMatchPanel";
 
 function Pending({ label }: { label: string }) {
   return (
@@ -70,15 +71,24 @@ export function SplitInspector() {
       {/* Right: inspector tabs */}
       <div className="flex min-h-0 flex-col">
         <Tabs
-          defaultValue="structured"
+          defaultValue={decision?.po_reconciliation ? "po" : "structured"}
           className="flex min-h-0 flex-1 flex-col"
         >
           <TabsList>
+            {decision?.po_reconciliation && (
+              <TabsTrigger value="po">PO match</TabsTrigger>
+            )}
             <TabsTrigger value="ocr">OCR text</TabsTrigger>
             <TabsTrigger value="structured">Structured</TabsTrigger>
             <TabsTrigger value="decision">Decision</TabsTrigger>
             <TabsTrigger value="compare">Compare</TabsTrigger>
           </TabsList>
+
+          {decision?.po_reconciliation && (
+            <TabsContent value="po" className="min-h-0 flex-1 overflow-auto">
+              <PoMatchPanel docId={document.id} refreshKey={decision} />
+            </TabsContent>
+          )}
 
           <TabsContent value="ocr" className="min-h-0 flex-1">
             {ocr ? (

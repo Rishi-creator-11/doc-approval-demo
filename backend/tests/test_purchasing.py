@@ -125,15 +125,17 @@ def test_mismatch_sample_routes_to_review_with_concrete_reason():
 def test_reviewer_decision_validation_timestamp_and_write_once():
     with TestClient(app) as c:
         doc = run(c, "lumen-invoice-8842-mismatch", "review-1")
-        bad = c.post(f"/documents/{doc}/review", json={"reviewer": "A", "outcome": "approve", "reason": "ok"})
+        bad = c.post(f"/documents/{doc}/review", headers={"X-Session-Id": "review-1"}, json={"reviewer": "A", "outcome": "approve", "reason": "ok"})
         assert bad.status_code == 422
-        bad2 = c.post(f"/documents/{doc}/review", json={"reviewer": "Dana Reyes", "outcome": "maybe", "reason": "long enough reason"})
+        bad2 = c.post(f"/documents/{doc}/review", headers={"X-Session-Id": "review-1"}, json={"reviewer": "Dana Reyes", "outcome": "maybe", "reason": "long enough reason"})
         assert bad2.status_code == 422
-        ok = c.post(f"/documents/{doc}/review", json={"reviewer": "Dana Reyes", "outcome": "reject", "reason": "Quantity exceeds PO; ask supplier for credit note."})
+        forbidden = c.post(f"/documents/{doc}/review", headers={"X-Session-Id": "someone-else"}, json={"reviewer": "Dana Reyes", "outcome": "reject", "reason": "Quantity exceeds PO; ask supplier for credit note."})
+        assert forbidden.status_code == 403
+        ok = c.post(f"/documents/{doc}/review", headers={"X-Session-Id": "review-1"}, json={"reviewer": "Dana Reyes", "outcome": "reject", "reason": "Quantity exceeds PO; ask supplier for credit note."})
         assert ok.status_code == 201
         rec = ok.json()
         assert rec["system_decision"] == "needs_review" and rec["decided_at"].endswith("+00:00")
-        again = c.post(f"/documents/{doc}/review", json={"reviewer": "Dana Reyes", "outcome": "approve", "reason": "changed my mind entirely"})
+        again = c.post(f"/documents/{doc}/review", headers={"X-Session-Id": "review-1"}, json={"reviewer": "Dana Reyes", "outcome": "approve", "reason": "changed my mind entirely"})
         assert again.status_code == 409
         assert c.get(f"/documents/{doc}/workflow").json()["review"]["outcome"] == "reject"
 
@@ -208,3 +210,25 @@ def test_expired_documents_are_purged_in_public_mode(public, monkeypatch):
         a = run(c, "hp-invoice-3301-valid", "ttl-1")
         run(c, "hp-invoice-3301-valid", "ttl-2")  # ingest purges documents older than the TTL
         assert c.get(f"/documents/{a}").status_code == 404
+
+
+def test_public_mode_gates_paid_stage_routes_but_not_free_ones(public):
+    from tests.conftest import SAMPLES
+    pdf = (SAMPLES / "hp-invoice-3301-valid.pdf").read_bytes()
+    h = {"X-Sandbox-Token": "s3cret-test"}
+    with TestClient(app) as c:
+        doc = c.post("/documents", files={"file": ("a.pdf", pdf, "application/pdf")}, headers=h).json()["id"]
+        # paid / heavy engines and default providers need the token
+        assert c.post(f"/documents/{doc}/ocr", params={"engine": "qwen-vl"}).status_code == 403
+        assert c.post(f"/documents/{doc}/ocr", params={"engine": "docling"}).status_code == 403
+        assert c.post(f"/documents/{doc}/ocr").status_code == 403  # default engine is docling
+        assert c.post(f"/documents/{doc}/structure", params={"doc_type": "invoice"}).status_code == 403
+        assert c.post(f"/documents/{doc}/decide").status_code == 403  # default provider is llm
+        # free deterministic ones are open
+        assert c.post(f"/documents/{doc}/ocr", params={"engine": "pdf-text"}).status_code == 200
+        assert c.post(f"/documents/{doc}/structure", params={"doc_type": "invoice", "provider": "mock", "ocr_engine": "pdf-text"}).status_code == 200
+        assert c.post(f"/documents/{doc}/decide", params={"provider": "mock"}).status_code == 200
+        # a sandbox upload has no owning session, so reviewing it needs the token
+        body = {"reviewer": "Dana Reyes", "outcome": "approve", "reason": "checked against the PO"}
+        assert c.post(f"/documents/{doc}/review", json=body).status_code == 403
+        assert c.post(f"/documents/{doc}/review", json=body, headers=h).status_code == 201
