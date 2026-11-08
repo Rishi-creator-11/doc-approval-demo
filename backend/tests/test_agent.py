@@ -99,6 +99,8 @@ def _doc(doc_type: DocType) -> Document:
 
 
 def test_decide_route_approves_clean_invoice():
+    # Modified for the PO workflow: the mock-extracted invoice has no PO number, so the
+    # purchasing reconciliation routes it to review instead of approving (was "approve").
     with TestClient(app) as client:
         doc_id = _upload(client, "invoice-clean.pdf")
         _ocr(client, doc_id)
@@ -107,15 +109,16 @@ def test_decide_route_approves_clean_invoice():
         post = client.post(f"/documents/{doc_id}/decide", params={"provider": "mock"})
         assert post.status_code == 200, post.text
         result = post.json()
-        assert result["decision"] == "approve"
-        assert result["status"] == "decided"
+        assert result["decision"] == "needs_review"
+        assert result["po_reconciliation"]["status"] == "no_po_number"
+        assert result["status"] == "needs_review"
         assert result["provider"] == "mock"
         assert result["checks"], "expected a rule-by-rule check trace"
         assert result["citations"], "expected at least one field citation"
         assert 0.0 <= result["confidence"] <= 1.0
 
         detail = client.get(f"/documents/{doc_id}").json()
-        assert detail["status"] == "decided"
+        assert detail["status"] == "needs_review"
 
 
 def test_decide_get_refetch():

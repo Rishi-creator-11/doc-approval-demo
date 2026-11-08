@@ -7,6 +7,7 @@ from pathlib import Path
 # Must run before any `app.*` import so app.config.settings picks up the temp dir.
 _TMP_DATA = tempfile.mkdtemp(prefix="doc-approval-tests-")
 os.environ["DATA_DIR"] = _TMP_DATA
+os.environ["STATE_DIR"] = tempfile.mkdtemp(prefix="doc-approval-state-")  # modified: DB lives outside served dir
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 SAMPLES = BACKEND_ROOT / "samples"

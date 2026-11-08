@@ -18,6 +18,7 @@ from app.pipeline.agent import run_decision
 from app.pipeline.ocr import run_ocr
 from app.pipeline.prescan import run_prescan
 from app.pipeline.structuring import run_structuring
+from app.po import reconcile_invoice
 from app.rules import DecisionContext
 from app.schemas import DecisionResult, OCRResult, QualityReport, StructuredResult
 
@@ -251,7 +252,7 @@ def get_structure(doc_id: str, session: Session = Depends(get_session)) -> Struc
     return StructuredResult(**structure)
 
 
-def _prior_invoice_numbers(session: Session, exclude_doc_id: str) -> set[str]:
+def _prior_invoice_numbers(session: Session, exclude_doc_id: str, scope: str | None = None) -> set[str]:
     """Invoice numbers seen on OTHER documents that were already decided.
 
     Only decided runs count: an in-progress or abandoned upload shouldn't make a
@@ -262,6 +263,11 @@ def _prior_invoice_numbers(session: Session, exclude_doc_id: str) -> set[str]:
     runs = session.exec(select(PipelineRun).where(PipelineRun.document_id != exclude_doc_id)).all()
     for run in runs:
         if "decide" not in run.stage_results:
+            continue
+        # Modified: sample runs are scoped per browser session so visitors don't flag each other.
+        if scope is not None and (run.stage_results.get("meta") or {}).get("session") != scope:
+            continue
+        if scope is None and (run.stage_results.get("meta") or {}).get("session"):
             continue
         structure = run.stage_results.get("structure") or {}
         node = (structure.get("fields") or {}).get("invoice_no") or {}
@@ -294,7 +300,10 @@ async def decide_document(
     structured = StructuredResult(**structure)
 
     prescan = (run.stage_results.get("prescan") or {}) if run else {}
+    # Modified: reconcile invoices against the seeded purchase orders before the rules run.
+    po_rec = reconcile_invoice(structured.fields) if structured.doc_type == DocType.invoice else None
     ctx = DecisionContext(
+        po_reconciliation=po_rec,
         extraction_confidence=structured.extraction_confidence,
         prescan_verdict=prescan.get("verdict"),
         prescan_reasons=list(prescan.get("reasons") or []),

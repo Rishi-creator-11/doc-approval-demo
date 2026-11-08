@@ -25,6 +25,8 @@ class DecisionContext:
     prescan_verdict: str | None = None  # "pass" | "warn" | None (no prescan run)
     prescan_reasons: list[str] = field(default_factory=list)  # page-prefixed warn reasons
     prior_invoice_numbers: set[str] = field(default_factory=set)
+    # Modified: PO reconciliation (app.po) computed before the rules run; None = not run.
+    po_reconciliation: object | None = None
 
 
 # --- field accessors (fields is a JSON-dumped dict, not a Pydantic model) -----

@@ -12,6 +12,7 @@ from app.schemas import OCRResult
 from .base import OCREngine
 from .docling import DoclingEngine
 from .mock import MockEngine
+from .pdf_text import PdfTextEngine
 from .qwen_vl import QwenVLEngine
 
 # Engine name -> factory. The route validates ?engine= against these keys.
@@ -19,6 +20,7 @@ ENGINES: dict[str, type[OCREngine]] = {
     "qwen-vl": QwenVLEngine,
     "docling": DoclingEngine,
     "mock": MockEngine,
+    "pdf-text": PdfTextEngine,
 }
 
 

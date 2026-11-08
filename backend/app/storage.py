@@ -217,3 +217,34 @@ def save_structure_artifact(doc_id: str, content: str, name: str = "extractions.
 def structure_artifact_url(doc_id: str, name: str = "extractions.jsonl") -> str:
     """Relative URL (served via /files) for the saved structuring artifact."""
     return f"/files/{doc_id}/structure/{name}"
+
+
+def purge_expired(session) -> int:
+    """Ephemeral processing (adapter addition): drop documents past their TTL.
+
+    Active in PUBLIC_MODE (also enforces MAX_DOCUMENTS by evicting the oldest first).
+    """
+    if not settings.public_mode:
+        return 0
+    from datetime import datetime, timedelta, timezone
+
+    from sqlmodel import delete, select
+
+    from app.models import Document, PipelineRun
+
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=settings.doc_ttl_minutes)
+    docs = session.exec(select(Document).order_by(Document.created_at)).all()
+
+    def aware(dt):
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+    doomed = [d for d in docs if aware(d.created_at) < cutoff]
+    keep = [d for d in docs if d not in doomed]
+    doomed += keep[: max(0, len(keep) - settings.max_documents + 1)]
+    for d in doomed:
+        session.exec(delete(PipelineRun).where(PipelineRun.document_id == d.id))
+        session.delete(d)
+        delete_document_dir(d.id)
+    if doomed:
+        session.commit()
+    return len(doomed)

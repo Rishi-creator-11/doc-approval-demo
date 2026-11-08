@@ -223,3 +223,5 @@ class DecisionResult(BaseModel):
     llm_decision: Decision | None = None  # what the LLM proposed before reconciliation
     warnings: list[str] = []
     latency_ms: int = 0
+    # Modified: invoice-vs-PO reconciliation (expected vs observed + evidence), if run.
+    po_reconciliation: dict | None = None

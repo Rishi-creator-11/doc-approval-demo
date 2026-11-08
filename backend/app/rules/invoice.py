@@ -80,6 +80,24 @@ def invoice_checks(fields: dict, ctx: DecisionContext) -> list[Check]:
             )
         )
 
+    # PO reconciliation (review): a deterministic mismatch against the seeded purchase
+    # order routes the invoice to a human reviewer, with the reasons spelled out.
+    rec = ctx.po_reconciliation
+    if rec is not None:
+        ok = rec.status == "matched"
+        checks.append(
+            Check(
+                name="po_reconciliation",
+                passed=ok,
+                detail=(
+                    f"matches {rec.po_number} ({rec.supplier_on_po})"
+                    if ok
+                    else "; ".join(rec.reasons) or f"PO status: {rec.status}"
+                ),
+                severity="review",
+            )
+        )
+
     # PO present (advisory) — surfaced, but absence alone doesn't block.
     po_present = present(fields, "po_number")
     checks.append(

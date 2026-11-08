@@ -1,0 +1,62 @@
+[
+  {
+    "cls": "vendor",
+    "text": "Harbor & Pine Paper Co."
+  },
+  {
+    "cls": "invoice_no",
+    "text": "INV-HP-3301"
+  },
+  {
+    "cls": "po_number",
+    "text": "PO-24017"
+  },
+  {
+    "cls": "invoice_date",
+    "text": "2026-10-12"
+  },
+  {
+    "cls": "due_date",
+    "text": "2026-11-11"
+  },
+  {
+    "cls": "line_item",
+    "text": "40 x Matte coated paper 100lb 12x18 (ream) @ 62.50 = 2,500.00",
+    "attributes": {
+      "desc": "Matte coated paper 100lb 12x18 (ream)",
+      "qty": "40",
+      "unit_price": "62.50",
+      "amount": "2,500.00"
+    }
+  },
+  {
+    "cls": "line_item",
+    "text": "25 x Archival cardstock 80lb (ream) @ 48.00 = 1,200.00",
+    "attributes": {
+      "desc": "Archival cardstock 80lb (ream)",
+      "qty": "25",
+      "unit_price": "48.00",
+      "amount": "1,200.00"
+    }
+  },
+  {
+    "cls": "subtotal",
+    "text": "3,700.00"
+  },
+  {
+    "cls": "tax",
+    "text": "296.00"
+  },
+  {
+    "cls": "total",
+    "text": "$3,996.00"
+  },
+  {
+    "cls": "currency",
+    "text": "USD"
+  },
+  {
+    "cls": "payment_terms",
+    "text": "Net 30"
+  }
+]

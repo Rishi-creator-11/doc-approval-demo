@@ -1,0 +1,72 @@
+[
+  {
+    "cls": "vendor",
+    "text": "Lumen Ink & Toner Supply"
+  },
+  {
+    "cls": "invoice_no",
+    "text": "INV-LI-8842"
+  },
+  {
+    "cls": "po_number",
+    "text": "PO-24018"
+  },
+  {
+    "cls": "invoice_date",
+    "text": "2026-10-14"
+  },
+  {
+    "cls": "due_date",
+    "text": "2026-11-13"
+  },
+  {
+    "cls": "line_item",
+    "text": "14 x Cyan pigment ink cartridge @ 93.10 = 1,303.40",
+    "attributes": {
+      "desc": "Cyan pigment ink cartridge",
+      "qty": "14",
+      "unit_price": "93.10",
+      "amount": "1,303.40"
+    }
+  },
+  {
+    "cls": "line_item",
+    "text": "12 x Magenta pigment ink cartridge @ 91.40 = 1,096.80",
+    "attributes": {
+      "desc": "Magenta pigment ink cartridge",
+      "qty": "12",
+      "unit_price": "91.40",
+      "amount": "1,096.80"
+    }
+  },
+  {
+    "cls": "line_item",
+    "text": "8 x Black pigment ink cartridge @ 84.25 = 674.00",
+    "attributes": {
+      "desc": "Black pigment ink cartridge",
+      "qty": "8",
+      "unit_price": "84.25",
+      "amount": "674.00"
+    }
+  },
+  {
+    "cls": "subtotal",
+    "text": "3,074.20"
+  },
+  {
+    "cls": "tax",
+    "text": "245.94"
+  },
+  {
+    "cls": "total",
+    "text": "$3,320.14"
+  },
+  {
+    "cls": "currency",
+    "text": "USD"
+  },
+  {
+    "cls": "payment_terms",
+    "text": "Net 30"
+  }
+]

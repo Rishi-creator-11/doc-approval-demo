@@ -24,7 +24,7 @@ from app.models import Document, DocType, DocumentStatus
 from app.schemas import FieldValue, Grounding, OCRResult, StructuredResult
 from app import storage
 
-PROVIDERS = {"langextract", "mock"}
+PROVIDERS = {"langextract", "mock", "recorded"}
 
 
 def run_structuring(
@@ -48,6 +48,12 @@ def run_structuring(
         flats = _structure_mock(doc_type, ocr_result.full_text)
         artifact: str | None = None
         model = "mock"
+    elif provider == "recorded":
+        # Modified: replay a stored extraction for a predefined sample. Spans are still
+        # grounded against the live OCR text, so this is labelled "recorded".
+        flats = _structure_recorded(doc.filename)
+        artifact = None
+        model = "recorded-extraction"
     else:
         flats, artifact = _structure_langextract(spec, ocr_result.full_text)
         model = settings.structuring_model
@@ -136,6 +142,23 @@ def _structure_langextract(spec, full_text: str) -> tuple[list[FlatExtraction], 
             )
         )
     return flats, _artifact_jsonl(flats)
+
+
+def _structure_recorded(filename: str) -> list[FlatExtraction]:
+    """Load recorded extractions for a predefined sample (matched by filename stem)."""
+    import json as _json
+    from pathlib import Path as _Path
+
+    from app.config import BACKEND_ROOT
+
+    stem = _Path(filename).stem
+    path = BACKEND_ROOT / "samples" / "recorded" / f"{stem}.json"
+    if "/" in stem or "\\" in stem or not path.is_file():
+        raise ValueError("No recorded extraction exists for this document; use a live provider.")
+    return [
+        FlatExtraction(cls=e["cls"], text=e["text"], attributes=dict(e.get("attributes") or {}))
+        for e in _json.loads(path.read_text())
+    ]
 
 
 def _structure_mock(doc_type: DocType, full_text: str) -> list[FlatExtraction]:

@@ -78,6 +78,19 @@ class Settings(BaseSettings):
         "California",
     ]
 
+    # --- Adapter additions: public deployment controls --------------------------------
+    # PUBLIC_MODE=true: visitors use predefined samples only; arbitrary upload and the
+    # delete-all endpoint require the sandbox token; stored documents expire.
+    public_mode: bool = False
+    sandbox_token: str = ""  # shared secret for the authorized upload sandbox (header X-Sandbox-Token)
+    sandbox_max_upload_mb: int = 3
+    doc_ttl_minutes: int = 60  # ephemeral processing: documents older than this are purged
+    max_documents: int = 40  # hard cap on stored documents in public mode
+    live_global_per_hour: int = 20  # live (paid) pipeline runs allowed per hour, all visitors
+    live_ip_per_hour: int = 3
+    # SQLite lives OUTSIDE the statically served data dir (upstream served app.db at /files/app.db).
+    state_dir: str = "state"
+
     # Browser origins allowed to call the API (Vite dev server by default).
     cors_origins: list[str] = ["http://localhost:5173"]
 
@@ -86,6 +99,11 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @property
+    def state_path(self) -> Path:
+        path = Path(self.state_dir)
+        return path if path.is_absolute() else BACKEND_ROOT / path
 
     @property
     def data_path(self) -> Path:

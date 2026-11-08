@@ -29,7 +29,7 @@ from app.rules import (
 )
 from app.schemas import Check, Decision, DecisionResult, StructuredResult
 
-PROVIDERS = {"llm", "mock"}
+PROVIDERS = {"llm", "mock", "rules"}
 
 _VALID_DECISIONS = {"approve", "flag", "needs_review"}
 
@@ -59,6 +59,11 @@ def run_decision(
     if provider == "mock":
         llm_decision, llm_conf, llm_reasons = "approve", 0.95, ["mock approval"]
         model = "mock"
+    elif provider == "rules":
+        # Modified: deterministic, no LLM. Used by recorded/sample mode so the decision
+        # is derived purely from the code-computed rule trace.
+        llm_decision, llm_conf, llm_reasons = "approve", 0.95, ["no model used: decision derived from deterministic rules only"]
+        model = "rules-only"
     else:
         llm_decision, llm_conf, llm_reasons, llm_warnings = _decide_llm(
             doc_type.value, fields, checks, ctx
@@ -93,6 +98,9 @@ def run_decision(
         llm_decision=llm_decision,
         warnings=warnings,
         latency_ms=latency_ms,
+        po_reconciliation=(
+            ctx.po_reconciliation.model_dump(mode="json") if ctx.po_reconciliation else None
+        ),
     )
 
 

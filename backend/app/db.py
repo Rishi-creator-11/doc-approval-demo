@@ -8,8 +8,9 @@ from app.config import settings
 
 # Ensure the data dir exists before SQLite tries to create the file there.
 settings.data_path.mkdir(parents=True, exist_ok=True)
+settings.state_path.mkdir(parents=True, exist_ok=True)  # modified: DB is not served at /files
 
-_DB_PATH = settings.data_path / "app.db"
+_DB_PATH = settings.state_path / "app.db"
 engine = create_engine(
     f"sqlite:///{_DB_PATH}",
     connect_args={"check_same_thread": False},
