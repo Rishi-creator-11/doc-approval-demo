@@ -54,6 +54,8 @@ def authorize_stage(
         return
     from app.routes.documents import require_sandbox
 
+    if owner and not settings.public_mode:
+        raise HTTPException(status_code=403, detail="Only the session that ran this sample can change it.")
     require_sandbox(x_sandbox_token)
 
 
