@@ -179,6 +179,7 @@ export interface DecisionResult {
   llm_decision: Decision | null;
   warnings: string[];
   latency_ms: number;
+  po_reconciliation?: PoReconciliation | null;
 }
 
 // --- Purchasing workflow (adapter addition) ---------------------------------

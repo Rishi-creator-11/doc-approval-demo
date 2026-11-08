@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.config import settings
+from app.config import BACKEND_ROOT, settings
 from app.db import init_db
 from app.routes import documents, pipeline, purchasing
 
@@ -52,3 +52,10 @@ app.include_router(purchasing.router)
 def health() -> dict[str, str]:
     """Liveness probe used by the frontend status indicator."""
     return {"status": "ok"}
+
+
+# Adapter addition: serve the built SPA from the same origin in production (no CORS, one
+# service). Mounted last so every API route above takes precedence.
+_DIST = BACKEND_ROOT.parent / "dist"
+if _DIST.is_dir():
+    app.mount("/", StaticFiles(directory=_DIST, html=True), name="spa")

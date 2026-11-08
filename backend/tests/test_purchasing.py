@@ -218,17 +218,34 @@ def test_public_mode_gates_paid_stage_routes_but_not_free_ones(public):
     h = {"X-Sandbox-Token": "s3cret-test"}
     with TestClient(app) as c:
         doc = c.post("/documents", files={"file": ("a.pdf", pdf, "application/pdf")}, headers=h).json()["id"]
-        # paid / heavy engines and default providers need the token
+        # paid / heavy engines and default providers need the token (even with the token
+        # only ... the free ones below are exercised both without and with it)
         assert c.post(f"/documents/{doc}/ocr", params={"engine": "qwen-vl"}).status_code == 403
         assert c.post(f"/documents/{doc}/ocr", params={"engine": "docling"}).status_code == 403
         assert c.post(f"/documents/{doc}/ocr").status_code == 403  # default engine is docling
         assert c.post(f"/documents/{doc}/structure", params={"doc_type": "invoice"}).status_code == 403
         assert c.post(f"/documents/{doc}/decide").status_code == 403  # default provider is llm
-        # free deterministic ones are open
-        assert c.post(f"/documents/{doc}/ocr", params={"engine": "pdf-text"}).status_code == 200
-        assert c.post(f"/documents/{doc}/structure", params={"doc_type": "invoice", "provider": "mock", "ocr_engine": "pdf-text"}).status_code == 200
-        assert c.post(f"/documents/{doc}/decide", params={"provider": "mock"}).status_code == 200
+        # free deterministic ones work, but a sandbox upload has no owning session, so
+        # every stage route still needs the sandbox token
+        assert c.post(f"/documents/{doc}/ocr", params={"engine": "pdf-text"}).status_code == 403
+        assert c.post(f"/documents/{doc}/ocr", params={"engine": "pdf-text"}, headers=h).status_code == 200
+        assert c.post(f"/documents/{doc}/structure", params={"doc_type": "invoice", "provider": "mock", "ocr_engine": "pdf-text"}, headers=h).status_code == 200
+        assert c.post(f"/documents/{doc}/decide", params={"provider": "mock"}, headers=h).status_code == 200
         # a sandbox upload has no owning session, so reviewing it needs the token
         body = {"reviewer": "Dana Reyes", "outcome": "approve", "reason": "checked against the PO"}
         assert c.post(f"/documents/{doc}/review", json=body).status_code == 403
         assert c.post(f"/documents/{doc}/review", json=body, headers=h).status_code == 201
+
+
+def test_session_secret_is_never_exposed_and_stage_routes_check_ownership(public):
+    with TestClient(app) as c:
+        doc = run(c, "hp-invoice-3301-valid", "owner-sess")
+        wf = c.get(f"/documents/{doc}/workflow").json()
+        assert "session" not in wf["meta"] and "owner-sess" not in str(wf)
+        import hashlib
+        assert hashlib.sha256(b"owner-sess").hexdigest() not in str(wf)
+        # a different visitor cannot re-run the owner's stages; the owner can
+        assert c.post(f"/documents/{doc}/decide", params={"provider": "rules"}, headers={"X-Session-Id": "intruder"}).status_code == 403
+        assert c.post(f"/documents/{doc}/decide", params={"provider": "rules"}).status_code == 403
+        assert c.post(f"/documents/{doc}/decide", params={"provider": "rules"}, headers={"X-Session-Id": "owner-sess"}).status_code == 200
+        assert c.post(f"/documents/{doc}/prescan", headers={"X-Session-Id": "intruder"}).status_code == 403

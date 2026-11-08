@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { ArrowRight, ScanLine, Sparkles } from "lucide-react";
+import { getConfig } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { usePipelineContext } from "@/features/pipeline/PipelineContext";
 import { Dropzone } from "@/features/upload/Dropzone";
@@ -24,6 +26,14 @@ export function UploadView() {
     ingesting,
   } = usePipelineContext();
 
+  // Adapter addition: the public deployment exposes predefined samples only.
+  const [uploadEnabled, setUploadEnabled] = useState(true);
+  useEffect(() => {
+    getConfig()
+      .then((c) => setUploadEnabled(c.upload_enabled))
+      .catch(() => undefined);
+  }, []);
+
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-10 px-6 py-12">
       <div className="flex w-full max-w-2xl flex-col items-center gap-8">
@@ -46,6 +56,7 @@ export function UploadView() {
           <SamplePicker />
         </div>
 
+        {uploadEnabled && (
         <Card className="w-full">
           <CardContent className="space-y-6">
             <div className="grid gap-5 sm:grid-cols-2">
@@ -81,6 +92,7 @@ export function UploadView() {
             )}
           </CardContent>
         </Card>
+        )}
 
         <div className="flex flex-wrap items-center justify-center gap-x-1 gap-y-2 text-xs text-muted-foreground">
           {STAGES.map((s, i) => (
@@ -97,7 +109,7 @@ export function UploadView() {
         </div>
       </div>
 
-      <DocumentLibrary />
+      {uploadEnabled && <DocumentLibrary />}
     </div>
   );
 }

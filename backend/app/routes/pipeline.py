@@ -6,6 +6,8 @@ relevant stage entry, so re-running live on camera doesn't pile up rows.
 """
 
 import asyncio
+import hashlib
+import secrets
 from typing import Callable, TypeVar
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -33,6 +35,26 @@ _T = TypeVar("_T")
 _PUBLIC_OCR = {"pdf-text", "mock"}
 _PUBLIC_STRUCTURING = {"recorded", "mock"}
 _PUBLIC_DECISION = {"rules", "mock"}
+
+
+def session_hash(session_id: str) -> str:
+    """Only a hash of the browser session id is ever stored or returned."""
+    return hashlib.sha256(session_id[:64].encode()).hexdigest()
+
+
+def authorize_stage(
+    run, x_session_id: str | None, x_sandbox_token: str | None, *, enforce_owner: bool = False
+) -> None:
+    """PUBLIC_MODE: a stage may be (re)run only by the session that owns the document,
+    or with the sandbox token. Documents with no owner (sandbox uploads) need the token."""
+    owner = ((run.stage_results.get("meta") if run else None) or {}).get("session")
+    if not settings.public_mode and not (enforce_owner and owner):
+        return
+    if owner and x_session_id and secrets.compare_digest(session_hash(x_session_id), owner):
+        return
+    from app.routes.documents import require_sandbox
+
+    require_sandbox(x_sandbox_token)
 
 
 def _gate_public(value: str, allowed: set[str], token: str | None) -> None:
@@ -114,6 +136,8 @@ async def prescan_document(
     doc_id: str,
     deskew: bool = True,
     clean: bool = False,
+    x_session_id: str | None = Header(default=None),
+    x_sandbox_token: str | None = Header(default=None),
     session: Session = Depends(get_session),
 ) -> QualityReport:
     """Run the advisory pre-flight pass and write any cleaned page variants.
@@ -126,6 +150,7 @@ async def prescan_document(
         raise HTTPException(status_code=404, detail="Document not found.")
     if doc.page_count == 0:
         raise HTTPException(status_code=409, detail="Document has no rasterized pages.")
+    authorize_stage(_latest_run(session, doc_id), x_session_id, x_sandbox_token)
 
     report = await _run_stage(
         "Prescan", settings.prescan_timeout_s, run_prescan, doc, deskew=deskew, clean=clean
@@ -157,6 +182,7 @@ def get_prescan(doc_id: str, session: Session = Depends(get_session)) -> Quality
 async def ocr_document(
     doc_id: str,
     engine: str = Query(default=""),
+    x_session_id: str | None = Header(default=None),
     x_sandbox_token: str | None = Header(default=None),
     session: Session = Depends(get_session),
 ) -> OCRResult:
@@ -174,6 +200,7 @@ async def ocr_document(
         raise HTTPException(status_code=404, detail="Document not found.")
     if doc.page_count == 0:
         raise HTTPException(status_code=409, detail="Document has no rasterized pages.")
+    authorize_stage(_latest_run(session, doc_id), x_session_id, x_sandbox_token)
 
     result = await _run_stage("OCR", settings.ocr_timeout_s, run_ocr, doc, engine)
 
@@ -213,6 +240,7 @@ async def structure_document(
     doc_type: DocType | None = Query(default=None),
     provider: str = Query(default=""),
     ocr_engine: str = Query(default=""),
+    x_session_id: str | None = Header(default=None),
     x_sandbox_token: str | None = Header(default=None),
     session: Session = Depends(get_session),
 ) -> StructuredResult:
@@ -236,6 +264,7 @@ async def structure_document(
         )
 
     run = _latest_run(session, doc_id)
+    authorize_stage(run, x_session_id, x_sandbox_token)
     ocr = (run.stage_results.get("ocr") or {}) if run else {}
     ocr_data = ocr.get(ocr_engine)
     if not ocr_data:
@@ -300,6 +329,7 @@ def _prior_invoice_numbers(session: Session, exclude_doc_id: str, scope: str | N
 async def decide_document(
     doc_id: str,
     provider: str = Query(default=""),
+    x_session_id: str | None = Header(default=None),
     x_sandbox_token: str | None = Header(default=None),
     session: Session = Depends(get_session),
 ) -> DecisionResult:
@@ -315,6 +345,7 @@ async def decide_document(
         raise HTTPException(status_code=404, detail="Document not found.")
 
     run = _latest_run(session, doc_id)
+    authorize_stage(run, x_session_id, x_sandbox_token)
     structure = run.stage_results.get("structure") if run else None
     if not structure:
         raise HTTPException(status_code=409, detail="Run structuring before deciding this document.")
@@ -328,7 +359,9 @@ async def decide_document(
         extraction_confidence=structured.extraction_confidence,
         prescan_verdict=prescan.get("verdict"),
         prescan_reasons=list(prescan.get("reasons") or []),
-        prior_invoice_numbers=_prior_invoice_numbers(session, doc_id),
+        prior_invoice_numbers=_prior_invoice_numbers(
+            session, doc_id, (run.stage_results.get("meta") or {}).get("session")
+        ),
     )
 
     result = await _run_stage(

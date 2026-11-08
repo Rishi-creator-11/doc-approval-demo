@@ -8,7 +8,6 @@ configured OpenRouter key, behind a per-IP and global hourly cap.
 
 from __future__ import annotations
 
-import secrets
 import time
 from collections import deque
 from threading import Lock
@@ -30,9 +29,10 @@ from app.po import PURCHASE_ORDERS, reconcile_invoice
 from app.rules import DecisionContext
 from app.schemas import OCRResult, StructuredResult
 
-from .documents import ingest_document, require_sandbox
+from .documents import ingest_document
 from .pipeline import (
-    _latest_run, _prior_invoice_numbers, _run_stage, _save_stage, get_or_create_run,
+    _latest_run, _prior_invoice_numbers, _run_stage, _save_stage, authorize_stage,
+    get_or_create_run, session_hash,
 )
 
 router = APIRouter(tags=["purchasing"])
@@ -116,7 +116,7 @@ async def run_sample(
     content = (SAMPLES_DIR / sample["file"]).read_bytes()
     doc = ingest_document(session, sample["file"], content, DocType.invoice)
     run = get_or_create_run(session, doc.id)
-    scope = (x_session_id or uuid4().hex)[:64]
+    scope = session_hash(x_session_id or uuid4().hex)
     ocr_engine = "pdf-text" if mode == "recorded" else "qwen-vl"
     s_provider = "recorded" if mode == "recorded" else "langextract"
     d_provider = "rules" if mode == "recorded" else "llm"
@@ -176,7 +176,8 @@ def get_workflow(doc_id: str, session: Session = Depends(get_session)) -> dict:
     decide = sr.get("decide")
     return {
         "mode": (sr.get("meta") or {}).get("mode", "manual"),
-        "meta": sr.get("meta"),
+        # Only non-identifying fields: the stored session hash is an ownership secret.
+        "meta": {k: v for k, v in (sr.get("meta") or {}).items() if k in ("mode", "sample", "ocr_engine")},
         "decision": decide,
         "po_reconciliation": (decide or {}).get("po_reconciliation"),
         "review": sr.get("review"),
@@ -198,12 +199,7 @@ def submit_review(
     sandbox token in public mode. The reviewer name is a free-text label, not an identity.
     """
     run = _doc_run(session, doc_id)
-    owner = (run.stage_results.get("meta") or {}).get("session")
-    if owner:
-        if not x_session_id or not secrets.compare_digest(x_session_id[:64], owner):
-            raise HTTPException(status_code=403, detail="Only the session that ran this sample can record its review.")
-    else:
-        require_sandbox(x_sandbox_token)
+    authorize_stage(run, x_session_id, x_sandbox_token, enforce_owner=True)
     doc = session.get(Document, doc_id)
     decide = run.stage_results.get("decide")
     if not decide:
